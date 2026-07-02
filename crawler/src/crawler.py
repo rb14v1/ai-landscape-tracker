@@ -21,6 +21,13 @@ from dateutil import parser as date_parser
 from dotenv import load_dotenv
 
 from summarizer import Summarizer
+from metrics import (
+    start_metrics_server,
+    http_requests_total,
+    http_request_duration_seconds,
+    http_errors_total,
+    active_connections,
+)
 
 
 class Crawler:
@@ -239,14 +246,21 @@ class Crawler:
                 time.sleep(base_delay)
             
             timeout = self.config.get('crawler', {}).get('timeout', 30)
-            response = requests.get(url, headers=headers, timeout=timeout)
-            response.raise_for_status()
-            
-            # Ensure we get text content (handles decompression automatically)
-            html_content = response.text
-            return BeautifulSoup(html_content, 'html.parser')
-            
+            active_connections.inc()
+            _t0 = time.time()
+            try:
+                response = requests.get(url, headers=headers, timeout=timeout)
+                http_requests_total.labels(method='GET', status=str(response.status_code)).inc()
+                http_request_duration_seconds.observe(time.time() - _t0)
+                response.raise_for_status()
+                # Ensure we get text content (handles decompression automatically)
+                html_content = response.text
+                return BeautifulSoup(html_content, 'html.parser')
+            finally:
+                active_connections.dec()
+
         except requests.exceptions.HTTPError as e:
+            http_errors_total.labels(error_type='http').inc()
             if e.response.status_code == 403:
                 if retry_count < max_retries:
                     print(f"  403 Forbidden on attempt {retry_count + 1}/{max_retries + 1}, retrying...")
@@ -258,6 +272,7 @@ class Crawler:
                 print(f"Error fetching {url}: {e}")
             return None
         except Exception as e:
+            http_errors_total.labels(error_type='exception').inc()
             print(f"Error fetching {url}: {e}")
             return None
     
@@ -478,6 +493,7 @@ class Crawler:
     
     def run(self):
         """Run the full crawl pipeline."""
+        start_metrics_server()
         print("Starting crawler...")
         
         # Crawl all sources
