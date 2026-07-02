@@ -9,6 +9,7 @@ github-copilot-sdk>=0.1.0
 
 # Utilities
 pyyaml>=6.0
+python-json-logger>=2.0.7
 
 # Testing
 pytest>=7.4.0
