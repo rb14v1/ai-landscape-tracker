@@ -5,7 +5,9 @@ Fetches and processes content from AI news sources.
 
 import json
 import hashlib
+import logging
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -17,16 +19,65 @@ import feedparser
 import yaml
 from bs4 import BeautifulSoup
 from dateutil import parser as date_parser
+from pythonjsonlogger import jsonlogger
 
 from summarizer import Summarizer
+
+
+# ---------------------------------------------------------------------------
+# Structured JSON logging setup
+# ---------------------------------------------------------------------------
+
+class _UtcJsonFormatter(jsonlogger.JsonFormatter):
+    """JsonFormatter that emits timestamps in UTC ISO-8601 and renames fields."""
+
+    converter = time.gmtime  # Use UTC for all timestamps
+
+    def add_fields(self, log_record, record, message_dict):
+        super().add_fields(log_record, record, message_dict)
+        if "asctime" in log_record:
+            log_record["timestamp"] = log_record.pop("asctime")
+        if "levelname" in log_record:
+            log_record["level"] = log_record.pop("levelname")
+
+
+class _MergingLoggerAdapter(logging.LoggerAdapter):
+    """LoggerAdapter that merges per-call extra fields with the adapter's own extra."""
+
+    def process(self, msg, kwargs):
+        merged = dict(self.extra)
+        merged.update(kwargs.get("extra") or {})
+        kwargs["extra"] = merged
+        return msg, kwargs
+
+
+def _build_base_logger(name: str) -> logging.Logger:
+    logger = logging.getLogger(name)
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(_UtcJsonFormatter(
+            fmt="%(asctime)s %(levelname)s %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%SZ",
+        ))
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+    return logger
+
+
+_base_logger = _build_base_logger(__name__)
 
 
 class Crawler:
     """Main crawler class for fetching AI news from configured sources."""
     
     def __init__(self, config_path: str = "../config.yaml"):
+        self.correlation_id = str(uuid.uuid4())
+        self.logger = _MergingLoggerAdapter(
+            _base_logger, {"correlation_id": self.correlation_id}
+        )
         self.config = self._load_config(config_path)
-        self.summarizer = Summarizer()
+        self.summarizer = Summarizer(correlation_id=self.correlation_id)
         self.entries = []
         self.session = self._create_session()
         
@@ -208,7 +259,7 @@ class Crawler:
             # Add delay between requests to be respectful
             if retry_count > 0:
                 delay = 2 ** retry_count  # Exponential backoff
-                print(f"  Waiting {delay}s before retry...")
+                self.logger.info("Waiting before retry", extra={"delay_seconds": delay, "retry_count": retry_count})
                 time.sleep(delay)
             else:
                 base_delay = self.config.get('crawler', {}).get('delay_between_requests', 1)
@@ -225,16 +276,21 @@ class Crawler:
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 403:
                 if retry_count < max_retries:
-                    print(f"  403 Forbidden on attempt {retry_count + 1}/{max_retries + 1}, retrying...")
+                    self.logger.warning(
+                        "403 Forbidden, retrying",
+                        extra={"url": url, "attempt": retry_count + 1, "max_attempts": max_retries + 1},
+                    )
                     return self._fetch_page(url, retry_count + 1, max_retries)
                 else:
-                    print(f"Error fetching {url}: 403 Forbidden - Site may require authentication or block automated access")
-                    print(f"  Suggestion: Try using RSS feed or API if available")
+                    self.logger.error(
+                        "403 Forbidden - site may require authentication or block automated access",
+                        extra={"url": url, "suggestion": "Try using RSS feed or API if available"},
+                    )
             else:
-                print(f"Error fetching {url}: {e}")
+                self.logger.error("HTTP error fetching page", extra={"url": url, "error": str(e)})
             return None
         except Exception as e:
-            print(f"Error fetching {url}: {e}")
+            self.logger.error("Error fetching page", extra={"url": url, "error": str(e)})
             return None
     
     def _fetch_rss(self, rss_url: str) -> list:
@@ -279,7 +335,7 @@ class Crawler:
                 })
             return entries
         except Exception as e:
-            print(f"Error fetching RSS {rss_url}: {e}")
+            self.logger.error("Error fetching RSS feed", extra={"rss_url": rss_url, "error": str(e)})
             return []
     
     def _parse_date(self, date_str: str) -> Optional[str]:
@@ -311,10 +367,10 @@ class Crawler:
         """Crawl a single source for articles."""
         # Skip disabled sources
         if not source.get('enabled', True):
-            print(f"Skipping {source['name']} (disabled)")
+            self.logger.info("Skipping disabled source", extra={"source": source["name"]})
             return []
-        
-        print(f"Crawling {source['name']}...")
+
+        self.logger.info("Crawling source", extra={"source": source["name"]})
         entries = []
         
         # Try RSS first if available
@@ -395,7 +451,7 @@ class Crawler:
                         'tags': []
                     })
         
-        print(f"  Found {len(entries)} entries from {source['name']}")
+        self.logger.info("Finished crawling source", extra={"source": source["name"], "entry_count": len(entries)})
         return entries
     
     def crawl_all(self) -> list:
@@ -421,7 +477,7 @@ class Crawler:
     
     def generate_summaries(self, entries: list) -> list:
         """Generate summaries and categorize entries using Copilot SDK."""
-        print("Generating summaries and categories...")
+        self.logger.info("Generating summaries and categories")
         for entry in entries:
             if not entry.get('summary') and entry.get('content'):
                 entry['summary'] = self.summarizer.summarize(
@@ -450,22 +506,22 @@ class Crawler:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         
-        print(f"Saved {len(entries)} entries to {output_path}")
+        self.logger.info("Saved entries to file", extra={"entry_count": len(entries), "output_path": str(output_path)})
     
     def run(self):
         """Run the full crawl pipeline."""
-        print("Starting crawler...")
-        
+        self.logger.info("Starting crawler")
+
         # Crawl all sources
         entries = self.crawl_all()
-        
+
         # Generate summaries
         entries = self.generate_summaries(entries)
-        
+
         # Save to file
         self.save_entries(entries)
-        
-        print("Crawl complete!")
+
+        self.logger.info("Crawl complete", extra={"total_entries": len(entries)})
         return entries
 
 
