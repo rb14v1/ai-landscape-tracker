@@ -3,13 +3,66 @@ Agentic AI Landscape Tracker - LLM Summarizer
 Uses GitHub Copilot SDK to generate brief summaries.
 """
 
+import logging
+import time
+import uuid
 from typing import Optional
+
+from pythonjsonlogger import jsonlogger
+
+
+# ---------------------------------------------------------------------------
+# Structured JSON logging setup
+# ---------------------------------------------------------------------------
+
+class _UtcJsonFormatter(jsonlogger.JsonFormatter):
+    """JsonFormatter that emits timestamps in UTC ISO-8601 and renames fields."""
+
+    converter = time.gmtime  # Use UTC for all timestamps
+
+    def add_fields(self, log_record, record, message_dict):
+        super().add_fields(log_record, record, message_dict)
+        if "asctime" in log_record:
+            log_record["timestamp"] = log_record.pop("asctime")
+        if "levelname" in log_record:
+            log_record["level"] = log_record.pop("levelname")
+
+
+class _MergingLoggerAdapter(logging.LoggerAdapter):
+    """LoggerAdapter that merges per-call extra fields with the adapter's own extra."""
+
+    def process(self, msg, kwargs):
+        merged = dict(self.extra)
+        merged.update(kwargs.get("extra") or {})
+        kwargs["extra"] = merged
+        return msg, kwargs
+
+
+def _build_base_logger(name: str) -> logging.Logger:
+    logger = logging.getLogger(name)
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(_UtcJsonFormatter(
+            fmt="%(asctime)s %(levelname)s %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%SZ",
+        ))
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+    return logger
+
+
+_base_logger = _build_base_logger(__name__)
 
 
 class Summarizer:
     """Generate summaries using GitHub Copilot SDK."""
     
-    def __init__(self):
+    def __init__(self, correlation_id: str = None):
+        self.correlation_id = correlation_id or str(uuid.uuid4())
+        self.logger = _MergingLoggerAdapter(
+            _base_logger, {"correlation_id": self.correlation_id}
+        )
         self.client = None
         self._init_client()
     
@@ -19,10 +72,10 @@ class Summarizer:
             from github_copilot_sdk import CopilotClient
             self.client = CopilotClient()
         except ImportError:
-            print("Warning: github-copilot-sdk not installed. Summaries will use fallback.")
+            self.logger.warning("github-copilot-sdk not installed; summaries will use fallback")
             self.client = None
         except Exception as e:
-            print(f"Warning: Could not initialize Copilot SDK: {e}")
+            self.logger.warning("Could not initialize Copilot SDK", extra={"error": str(e)})
             self.client = None
     
     def categorize(self, title: str, content: str) -> str:
@@ -102,7 +155,7 @@ Respond with ONLY 'Agentic AI' or 'Other':"""
                 return 'Agentic AI'
             return 'Other'
         except Exception as e:
-            print(f"Copilot categorization failed: {e}")
+            self.logger.error("Copilot categorization failed", extra={"error": str(e)})
             return 'Other'
     
     def _summarize_with_copilot(self, title: str, content: str, source: str) -> str:
@@ -125,7 +178,7 @@ Summary:"""
             summary = response.strip()
             return summary if summary else self._fallback_summarize(title, content, source)
         except Exception as e:
-            print(f"Copilot summarization failed: {e}")
+            self.logger.error("Copilot summarization failed", extra={"error": str(e)})
             return self._fallback_summarize(title, content, source)
     
     def _fallback_summarize(self, title: str, content: str, source: str) -> str:
@@ -159,4 +212,4 @@ if __name__ == '__main__':
         content="Anthropic has released Claude 3.5 Sonnet, their most capable model yet. It features improved reasoning, faster response times, and enhanced coding abilities.",
         source="Anthropic"
     )
-    print(f"Test summary: {test_summary}")
+    summarizer.logger.info("Test summary result", extra={"summary": test_summary})
