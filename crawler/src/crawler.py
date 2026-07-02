@@ -494,5 +494,7 @@ class Crawler:
 
 
 if __name__ == '__main__':
+    from healthcheck import start_health_server
+    start_health_server()
     crawler = Crawler()
     crawler.run()
