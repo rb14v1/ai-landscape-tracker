@@ -8,17 +8,24 @@ This script is designed to be run with Claude as the processing engine.
 """
 
 import json
+import os
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed; rely on environment variables being set externally
+
 def load_entries():
-    """Load entries from the raw JSON file"""
-    input_path = Path("c:/Users/VilhenaM/Cursor_VSCode Workspaces/ai-landscape-tracker/site/data/entries raw.json")
+    """Load entries from the raw JSON file — path read from DATA_INPUT_PATH env var"""
+    input_path = Path(os.environ.get('DATA_INPUT_PATH', 'site/data/entries raw.json'))
     with open(input_path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
 def load_existing_entries():
-    """Load existing processed entries if they exist"""
-    output_path = Path("c:/Users/VilhenaM/Cursor_VSCode Workspaces/ai-landscape-tracker/site/data/entries.json")
+    """Load existing processed entries if they exist — path read from DATA_OUTPUT_PATH env var"""
+    output_path = Path(os.environ.get('DATA_OUTPUT_PATH', 'site/data/entries.json'))
     if output_path.exists():
         with open(output_path, 'r', encoding='utf-8') as f:
             existing_data = json.load(f)
@@ -32,8 +39,8 @@ def load_existing_entries():
     return {}
 
 def save_entries(data):
-    """Save processed entries to the output file"""
-    output_path = Path("c:/Users/VilhenaM/Cursor_VSCode Workspaces/ai-landscape-tracker/site/data/entries.json")
+    """Save processed entries to the output file — path read from DATA_OUTPUT_PATH env var"""
+    output_path = Path(os.environ.get('DATA_OUTPUT_PATH', 'site/data/entries.json'))
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     print(f"Saved to {output_path}")
