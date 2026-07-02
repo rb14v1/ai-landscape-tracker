@@ -5,6 +5,7 @@ Fetches and processes content from AI news sources.
 
 import json
 import hashlib
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +18,7 @@ import feedparser
 import yaml
 from bs4 import BeautifulSoup
 from dateutil import parser as date_parser
+from dotenv import load_dotenv
 
 from summarizer import Summarizer
 
@@ -25,15 +27,37 @@ class Crawler:
     """Main crawler class for fetching AI news from configured sources."""
     
     def __init__(self, config_path: str = "../config.yaml"):
+        load_dotenv()
         self.config = self._load_config(config_path)
         self.summarizer = Summarizer()
         self.entries = []
         self.session = self._create_session()
         
     def _load_config(self, config_path: str) -> dict:
-        """Load crawler configuration from YAML file."""
+        """Load crawler configuration from YAML file, then overlay environment variables."""
         with open(config_path, 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f)
+            config = yaml.safe_load(f)
+
+        # Overlay environment variables onto the loaded YAML config.
+        # Any env var takes precedence over the YAML value.
+        if os.getenv('CRAWLER_OUTPUT_PATH'):
+            config.setdefault('output', {})['path'] = os.environ['CRAWLER_OUTPUT_PATH']
+
+        crawler_section = config.setdefault('crawler', {})
+        if os.getenv('CRAWLER_DELAY_BETWEEN_REQUESTS'):
+            crawler_section['delay_between_requests'] = float(os.environ['CRAWLER_DELAY_BETWEEN_REQUESTS'])
+        if os.getenv('CRAWLER_MAX_RETRIES'):
+            crawler_section['max_retries'] = int(os.environ['CRAWLER_MAX_RETRIES'])
+        if os.getenv('CRAWLER_TIMEOUT'):
+            crawler_section['timeout'] = int(os.environ['CRAWLER_TIMEOUT'])
+
+        backfill_section = config.setdefault('backfill', {})
+        if os.getenv('CRAWLER_BACKFILL_ENABLED'):
+            backfill_section['enabled'] = os.environ['CRAWLER_BACKFILL_ENABLED'].lower() in ('1', 'true', 'yes')
+        if os.getenv('CRAWLER_BACKFILL_START_DATE'):
+            backfill_section['start_date'] = os.environ['CRAWLER_BACKFILL_START_DATE']
+
+        return config
     
     def _create_session(self) -> requests.Session:
         """Create requests session with retry strategy."""

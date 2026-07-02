@@ -1,7 +1,14 @@
 import json
 import asyncio
+import os
 from pathlib import Path
 from copilot import CopilotClient
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed; rely on environment variables being set externally
 
 async def categorize_and_summarize_entry(entry, session):
     """
@@ -68,9 +75,9 @@ async def process_entries():
     session = await client.create_session({"model": "gpt-4.1"})
     
     try:
-        # Read the input file
-        input_path = Path("c:/Users/VilhenaM/Cursor_VSCode Workspaces/ai-landscape-tracker/site/data/entries raw.json")
-        output_path = Path("c:/Users/VilhenaM/Cursor_VSCode Workspaces/ai-landscape-tracker/site/data/entries.json")
+        # Read the input file — paths are read from environment variables
+        input_path = Path(os.environ.get('DATA_INPUT_PATH', 'site/data/entries raw.json'))
+        output_path = Path(os.environ.get('DATA_OUTPUT_PATH', 'site/data/entries.json'))
         
         with open(input_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
