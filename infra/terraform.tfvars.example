@@ -1,0 +1,6 @@
+# Copy this file to terraform.tfvars (git-ignored) and fill in the real values,
+# or export TF_VAR_* environment variables in your CI/CD pipeline.
+
+tenant_id     = "<your-tenant-id>"
+submission_id = "<your-submission-id>"
+cost_centre   = "<your-cost-centre>"

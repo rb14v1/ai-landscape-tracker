@@ -81,6 +81,14 @@ Thumbs.db
 .tmp/
 .temp/
 
+# Terraform – keep example committed, ignore real values
+*.tfvars
+!*.tfvars.example
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+
 # GitHub Copilot SDK cache
 .copilot/
 .cursor/*
