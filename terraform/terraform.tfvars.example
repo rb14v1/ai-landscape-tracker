@@ -1,0 +1,6 @@
+# Copy this file to terraform.tfvars and fill in real values before applying.
+# terraform.tfvars is git-ignored; this example file is committed as documentation.
+
+tenant_id     = "<your-tenant-id>"
+submission_id = "<your-submission-id>"
+cost_centre   = "<your-cost-centre-code>"
