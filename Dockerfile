@@ -1,22 +1,27 @@
 # syntax=docker/dockerfile:1
-FROM node:20-alpine AS builder
+FROM python:3.12-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+FROM python:3.12-slim
+
+RUN groupadd --gid 1000 appuser && useradd --uid 1000 --gid 1000 --create-home appuser
+COPY --from=builder /install /usr/local
+WORKDIR /app
+
 COPY . .
-RUN npm run build || true
 
-FROM node:20-alpine
+RUN chown -R appuser:appuser /app
 
-RUN addgroup --gid 1000 nodeuser && adduser --uid 1000 --gid 1000 --home /app --disabled-password nodeuser
-COPY --from=builder /app /app
+USER appuser
 
-USER nodeuser
-
-EXPOSE 3000
+EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget -qO- http://localhost:3000/healthz || exit 1
+  CMD curl -f http://localhost:8000/healthz || exit 1
 
-CMD ["node", "server.js"]
+CMD ["python", "main.py"]
