@@ -1,0 +1,2 @@
+Add a GET /healthz endpoint to Test that returns HTTP 200.
+Runtime detected: 
