@@ -1,26 +1,22 @@
-FROM python:3.12-slim
-
-# Create a non-root user
-RUN useradd --create-home --shell /bin/bash appuser
+# syntax=docker/dockerfile:1
+FROM node:20-alpine AS builder
 
 WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci
+COPY . .
+RUN npm run build || true
 
-# Copy and install dependencies
-COPY crawler/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+FROM node:20-alpine
 
-# Copy application source
-COPY crawler/ ./crawler/
+RUN addgroup --gid 1000 nodeuser && adduser --uid 1000 --gid 1000 --home /app --disabled-password nodeuser
+COPY --from=builder /app /app
 
-# Ensure the data directory exists and is owned by the non-root user
-RUN mkdir -p crawler/data && chown -R appuser:appuser /app
+USER nodeuser
 
-# Switch to non-root user
-USER appuser
+EXPOSE 3000
 
-WORKDIR /app/crawler/src
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD wget -qO- http://localhost:3000/healthz || exit 1
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD python -c "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/healthz').status == 200 else 1)"
-
-CMD ["python", "crawler.py"]
+CMD ["node", "server.js"]
