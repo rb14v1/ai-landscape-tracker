@@ -1,27 +1,25 @@
-# syntax=docker/dockerfile:1
-FROM python:3.12-slim AS builder
-
-RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
-
+```dockerfile
 FROM python:3.12-slim
 
-RUN groupadd --gid 1000 appuser && useradd --uid 1000 --gid 1000 --create-home appuser
-COPY --from=builder /install /usr/local
+# Create a non-root user
+RUN useradd --create-home --shell /bin/bash appuser
+
 WORKDIR /app
 
-COPY . .
+# Copy and install dependencies
+COPY crawler/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-RUN chown -R appuser:appuser /app
+# Copy application source
+COPY crawler/ ./crawler/
 
+# Ensure the data directory exists and is owned by the non-root user
+RUN mkdir -p crawler/data && chown -R appuser:appuser /app
+
+# Switch to non-root user
 USER appuser
 
-EXPOSE 8000
+WORKDIR /app/crawler/src
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8000/healthz || exit 1
-
-CMD ["python", "main.py"]
+CMD ["python", "crawler.py"]
+```
