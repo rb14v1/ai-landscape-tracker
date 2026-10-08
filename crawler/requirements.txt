@@ -18,3 +18,7 @@ python-dotenv>=1.0.0
 pytest>=7.4.0
 pytest-cov>=4.1.0
 pytest-mock>=3.12.0
+
+# FastAPI application and OIDC authentication
+fastapi>=0.111.0
+uvicorn>=0.29.0
