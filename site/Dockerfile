@@ -1,5 +1,7 @@
 FROM nginx:1.27-alpine AS final
 
+RUN apk upgrade --no-cache
+
 ENV PORT=8080
 
 RUN printf 'server {\n\
