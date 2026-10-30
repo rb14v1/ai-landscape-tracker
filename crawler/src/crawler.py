@@ -74,8 +74,8 @@ class Crawler:
         """Create requests session with retry strategy."""
         session = requests.Session()
         retry_strategy = Retry(
-            total=3,
-            backoff_factor=2,
+            total=self.settings.crawler_http_retry_total,
+            backoff_factor=self.settings.crawler_http_backoff_factor,
             status_forcelist=[429, 500, 502, 503, 504],
             allowed_methods=["HEAD", "GET", "OPTIONS"]
         )
@@ -497,7 +497,7 @@ class Crawler:
     
     def run(self):
         """Run the full crawl pipeline."""
-        start_metrics_server()
+        start_metrics_server(self.settings.metrics_port)
         print("Starting crawler...")
         
         # Crawl all sources

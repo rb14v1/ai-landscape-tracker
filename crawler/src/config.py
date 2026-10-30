@@ -31,8 +31,15 @@ class Settings(BaseSettings):
     crawler_backfill_enabled: Optional[bool] = None
     crawler_backfill_start_date: Optional[str] = None
 
+    # HTTP session retry strategy (urllib3 Retry)
+    crawler_http_retry_total: int = 3
+    crawler_http_backoff_factor: float = 2
+
     # Port for the liveness probe HTTP server
     health_port: int = 8080
+
+    # Port for the Prometheus /metrics HTTP server
+    metrics_port: int = 8000
 
 
 def get_settings() -> Settings:
