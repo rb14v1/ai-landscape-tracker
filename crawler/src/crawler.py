@@ -20,6 +20,7 @@ from bs4 import BeautifulSoup
 from dateutil import parser as date_parser
 from dotenv import load_dotenv
 
+from config import Settings, get_settings
 from summarizer import Summarizer
 from metrics import (
     start_metrics_server,
@@ -33,9 +34,11 @@ from metrics import (
 class Crawler:
     """Main crawler class for fetching AI news from configured sources."""
     
-    def __init__(self, config_path: str = "../config.yaml"):
+    def __init__(self, config_path: Optional[str] = None, settings: Optional[Settings] = None):
         load_dotenv()
-        self.config = self._load_config(config_path)
+        # Validate environment configuration on startup
+        self.settings = settings or get_settings()
+        self.config = self._load_config(config_path or self.settings.crawler_config_path)
         self.summarizer = Summarizer()
         self.entries = []
         self.session = self._create_session()
@@ -47,22 +50,23 @@ class Crawler:
 
         # Overlay environment variables onto the loaded YAML config.
         # Any env var takes precedence over the YAML value.
-        if os.getenv('CRAWLER_OUTPUT_PATH'):
-            config.setdefault('output', {})['path'] = os.environ['CRAWLER_OUTPUT_PATH']
+        settings = self.settings
+        if settings.crawler_output_path:
+            config.setdefault('output', {})['path'] = settings.crawler_output_path
 
         crawler_section = config.setdefault('crawler', {})
-        if os.getenv('CRAWLER_DELAY_BETWEEN_REQUESTS'):
-            crawler_section['delay_between_requests'] = float(os.environ['CRAWLER_DELAY_BETWEEN_REQUESTS'])
-        if os.getenv('CRAWLER_MAX_RETRIES'):
-            crawler_section['max_retries'] = int(os.environ['CRAWLER_MAX_RETRIES'])
-        if os.getenv('CRAWLER_TIMEOUT'):
-            crawler_section['timeout'] = int(os.environ['CRAWLER_TIMEOUT'])
+        if settings.crawler_delay_between_requests is not None:
+            crawler_section['delay_between_requests'] = settings.crawler_delay_between_requests
+        if settings.crawler_max_retries is not None:
+            crawler_section['max_retries'] = settings.crawler_max_retries
+        if settings.crawler_timeout is not None:
+            crawler_section['timeout'] = settings.crawler_timeout
 
         backfill_section = config.setdefault('backfill', {})
-        if os.getenv('CRAWLER_BACKFILL_ENABLED'):
-            backfill_section['enabled'] = os.environ['CRAWLER_BACKFILL_ENABLED'].lower() in ('1', 'true', 'yes')
-        if os.getenv('CRAWLER_BACKFILL_START_DATE'):
-            backfill_section['start_date'] = os.environ['CRAWLER_BACKFILL_START_DATE']
+        if settings.crawler_backfill_enabled is not None:
+            backfill_section['enabled'] = settings.crawler_backfill_enabled
+        if settings.crawler_backfill_start_date:
+            backfill_section['start_date'] = settings.crawler_backfill_start_date
 
         return config
     
@@ -511,6 +515,8 @@ class Crawler:
 
 if __name__ == '__main__':
     from healthcheck import start_health_server
-    start_health_server()
-    crawler = Crawler()
+    load_dotenv()
+    settings = get_settings()
+    start_health_server(settings.health_port)
+    crawler = Crawler(settings=settings)
     crawler.run()
