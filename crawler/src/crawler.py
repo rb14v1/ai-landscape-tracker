@@ -59,8 +59,7 @@ class Crawler:
             crawler_section['delay_between_requests'] = settings.crawler_delay_between_requests
         if settings.crawler_max_retries is not None:
             crawler_section['max_retries'] = settings.crawler_max_retries
-        if settings.crawler_timeout is not None:
-            crawler_section['timeout'] = settings.crawler_timeout
+        crawler_section['timeout'] = settings.crawler_timeout_seconds
 
         backfill_section = config.setdefault('backfill', {})
         if settings.crawler_backfill_enabled is not None:
@@ -68,8 +67,23 @@ class Crawler:
         if settings.crawler_backfill_start_date:
             backfill_section['start_date'] = settings.crawler_backfill_start_date
 
+        config['sources'] = [self._resolve_source_urls(s) for s in config.get('sources', [])]
+
         return config
-    
+
+    def _resolve_source_urls(self, source: dict) -> dict:
+        """Resolve source endpoint URLs from environment-backed settings.
+
+        Sources reference URLs via `url_setting` / `rss_url_setting`, which name
+        a field on Settings (populated from the matching env var).
+        """
+        resolved = dict(source)
+        if resolved.get('url_setting'):
+            resolved['url'] = getattr(self.settings, resolved['url_setting'])
+        if resolved.get('rss_url_setting'):
+            resolved['rss_url'] = getattr(self.settings, resolved['rss_url_setting'])
+        return resolved
+
     def _create_session(self) -> requests.Session:
         """Create requests session with retry strategy."""
         session = requests.Session()
@@ -249,7 +263,7 @@ class Crawler:
                 base_delay = self.config.get('crawler', {}).get('delay_between_requests', 1)
                 time.sleep(base_delay)
             
-            timeout = self.config.get('crawler', {}).get('timeout', 30)
+            timeout = self.settings.crawler_timeout_seconds
             active_connections.inc()
             _t0 = time.time()
             try:
@@ -352,6 +366,7 @@ class Crawler:
     
     def crawl_source(self, source: dict) -> list:
         """Crawl a single source for articles."""
+        source = self._resolve_source_urls(source)
         # Skip disabled sources
         if not source.get('enabled', True):
             print(f"Skipping {source['name']} (disabled)")
