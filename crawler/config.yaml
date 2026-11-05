@@ -13,13 +13,15 @@ backfill:
 crawler:
   delay_between_requests: 1  # Seconds to wait between requests
   max_retries: 3  # Maximum retry attempts for failed requests
-  timeout: 30  # Request timeout in seconds
+  # Request timeout is read from the CRAWLER_TIMEOUT_SECONDS env var
 
 # Source configurations
+# Endpoint URLs are read from environment variables at runtime:
+# url_setting / rss_url_setting name the Settings field (env var) holding the URL.
 sources:
   - name: "Anthropic"
     type: "blog"
-    url: "https://www.anthropic.com/news"
+    url_setting: "source_anthropic_url"
     rss_url: null
     # Fixed: Accept-Encoding header removed to allow proper decompression
     enabled: true
@@ -31,7 +33,7 @@ sources:
       
   - name: "Cursor"
     type: "changelog"
-    url: "https://www.cursor.com/changelog"
+    url_setting: "source_cursor_url"
     rss_url: null
     selectors:
       article_list: "article"  # Standard article tags
@@ -41,8 +43,8 @@ sources:
       
   - name: "GitHub Copilot"
     type: "blog"
-    url: "https://github.blog/tag/github-copilot/"
-    rss_url: "https://github.blog/tag/github-copilot/feed/"
+    url_setting: "source_github_copilot_url"
+    rss_url_setting: "source_github_copilot_rss_url"
     selectors:
       article_list: "article"
       title: "h2"
@@ -51,10 +53,10 @@ sources:
       
   - name: "OpenAI"
     type: "blog"
-    url: "https://openai.com/news/company-announcements/"
+    url_setting: "source_openai_url"
     # Note: OpenAI blog has strong bot protection (403 errors)
     # Consider using their RSS feed or API if available
-    rss_url: "https://openai.com/news/rss.xml"  # Alternative: Try main blog RSS
+    rss_url_setting: "source_openai_rss_url"  # Alternative: Try main blog RSS
     selectors:
       article_list: "article"
       title: "h2, h3"
@@ -63,7 +65,7 @@ sources:
 
   - name: "Google DeepMind"
     type: "blog"
-    url: "https://deepmind.google/discover/blog/"
+    url_setting: "source_google_deepmind_url"
     rss_url: null
     selectors:
       article_list: "article"

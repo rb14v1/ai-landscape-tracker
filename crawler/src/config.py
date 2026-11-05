@@ -21,22 +21,33 @@ class Settings(BaseSettings):
     )
 
     # Path to the YAML file describing sources and default crawler behaviour
-    crawler_config_path: str = '../config.yaml'
+    crawler_config_path: str
 
     # Optional overrides for values in the YAML config (env takes precedence)
     crawler_output_path: Optional[str] = None
     crawler_delay_between_requests: Optional[float] = None
     crawler_max_retries: Optional[int] = None
-    crawler_timeout: Optional[int] = None
     crawler_backfill_enabled: Optional[bool] = None
     crawler_backfill_start_date: Optional[str] = None
 
+    # Request timeout in seconds for outbound HTTP fetches
+    crawler_timeout_seconds: int
+
     # HTTP session retry strategy (urllib3 Retry)
-    crawler_http_retry_total: int = 3
-    crawler_http_backoff_factor: float = 2
+    crawler_http_retry_total: int
+    crawler_http_backoff_factor: float
+
+    # Source endpoint URLs (referenced from config.yaml via url_setting / rss_url_setting)
+    source_anthropic_url: str
+    source_cursor_url: str
+    source_github_copilot_url: str
+    source_github_copilot_rss_url: str
+    source_openai_url: str
+    source_openai_rss_url: str
+    source_google_deepmind_url: str
 
     # Port for the liveness probe HTTP server
-    health_port: int = 8080
+    health_port: int
 
     # Port for the Prometheus /metrics HTTP server
     metrics_port: int = 8000
